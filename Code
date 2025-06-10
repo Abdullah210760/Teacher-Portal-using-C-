@@ -1,0 +1,371 @@
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <string>
+#include <sstream>
+#include <iomanip>
+#include <algorithm>
+#include <numeric>
+#include <cmath>
+
+using namespace std;
+
+// Structure to store student data
+struct Student {
+    string name;
+    string rollNumber;
+    vector<double> quizzes;
+    vector<double> assignments;
+    double midterm;
+    double finalterm;
+    double project;
+    double total;
+    string grade;
+};
+
+// Function to split a string by delimiter (comma for CSV)
+vector<string> split(const string &s, char delimiter) {
+    vector<string> tokens;
+    string token;
+    istringstream tokenStream(s);
+    while (getline(tokenStream, token, delimiter)) {
+        tokens.push_back(token);
+    }
+    return tokens;
+}
+
+// Function to trim whitespace and quotes from a string
+string trim(const string &str) {
+    size_t first = str.find_first_not_of(" \t\"\'");
+    if (string::npos == first) {
+        return str;
+    }
+    size_t last = str.find_last_not_of(" \t\"\'");
+    return str.substr(first, (last - first + 1));
+}
+
+// Function to read student data from CSV file
+vector<Student> readStudentData(const string &filename) {
+    vector<Student> students;
+    ifstream file(filename);
+    string line;
+
+    if (!file.is_open()) {
+        cerr << "Error opening file: " << filename << endl;
+        return students;
+    }
+
+    // Skip the first two lines (headers)
+    getline(file, line); // Student Names, Roll Numbers, Q, Q, Q, etc.
+    getline(file, line); // Total Out of, 10, 10, etc.
+
+    while (getline(file, line)) {
+        vector<string> tokens = split(line, ',');
+        if (tokens.size() < 12) continue; // Skip invalid lines
+
+        Student student;
+        student.name = trim(tokens[0]);
+        student.rollNumber = trim(tokens[1]);
+
+        // Read quizzes (columns 2 to 7)
+        for (int i = 2; i < 8 && i < tokens.size(); i++) {
+            try {
+                student.quizzes.push_back(stod(trim(tokens[i])));
+            } catch (...) {
+                student.quizzes.push_back(0.0);
+            }
+        }
+        // Read assignments (columns 8 to 10)
+        for (int i = 8; i < 11 && i < tokens.size(); i++) {
+            try {
+                student.assignments.push_back(stod(trim(tokens[i])));
+            } catch (...) {
+                student.assignments.push_back(0.0);
+            }
+        }
+        // Read midterm, finalterm, project
+        try {
+            student.midterm = stod(trim(tokens[11]));
+        } catch (...) {
+            student.midterm = 0.0;
+        }
+        try {
+            student.finalterm = stod(trim(tokens[12]));
+        } catch (...) {
+            student.finalterm = 0.0;
+        }
+        try {
+            student.project = stod(trim(tokens[13]));
+        } catch (...) {
+            student.project = 0.0;
+        }
+        students.push_back(student);
+    }
+
+    file.close();
+    return students;
+}
+
+// Function to calculate total marks for all students
+void calculateTotals(vector<Student> &students, double quizWeight, double assignmentWeight, 
+                   double midtermWeight, double finaltermWeight, double projectWeight) {
+    for (auto &student : students) {
+        // Calculate quiz component
+        double quizTotal = accumulate(student.quizzes.begin(), student.quizzes.end(), 0.0);
+        double quizMax = student.quizzes.size() * 10.0;
+        double quizComponent = (quizTotal / quizMax) * quizWeight;
+
+        // Calculate assignment component
+        double assignmentTotal = accumulate(student.assignments.begin(), student.assignments.end(), 0.0);
+        double assignmentMax = student.assignments.size() * 10.0;
+        double assignmentComponent = (assignmentTotal / assignmentMax) * assignmentWeight;
+
+        // Calculate other components
+        double midtermComponent = (student.midterm / 100.0) * midtermWeight;
+        double finaltermComponent = (student.finalterm / 100.0) * finaltermWeight;
+        double projectComponent = (student.project / 40.0) * projectWeight;
+
+        // Calculate total
+        student.total = quizComponent + assignmentComponent + midtermComponent + 
+                        finaltermComponent + projectComponent;
+    }
+}
+
+// Function to determine grades based on class average
+void assignGrades(vector<Student> &students) {
+    // Calculate class average
+    double sum = 0.0;
+    for (const auto &student : students) {
+        sum += student.total;
+    }
+    double average = sum / students.size();
+    int roundedAverage = static_cast<int>(round(average));
+
+    // Define grade ranges based on average
+    vector<pair<int, string>> gradeRanges;
+    gradeRanges.push_back({0, "F"});
+    gradeRanges.push_back({roundedAverage - 22, "D"});
+    gradeRanges.push_back({roundedAverage - 17, "C-"});
+    gradeRanges.push_back({roundedAverage - 12, "C"});
+    gradeRanges.push_back({roundedAverage - 7, "C+"});
+    gradeRanges.push_back({roundedAverage - 2, "B-"});
+    gradeRanges.push_back({roundedAverage + 3, "B"});
+    gradeRanges.push_back({roundedAverage + 8, "B+"});
+    gradeRanges.push_back({roundedAverage + 13, "A-"});
+    gradeRanges.push_back({roundedAverage + 18, "A"});
+
+    // Assign grades to students
+    for (auto &student : students) {
+        int score = static_cast<int>(round(student.total));
+        string grade = "F"; // Default grade
+        
+        for (size_t i = gradeRanges.size() - 1; i > 0; i--) {
+            if (score >= gradeRanges[i].first) {
+                grade = gradeRanges[i].second;
+                break;
+            }
+        }
+        
+        student.grade = grade;
+    }
+}
+
+// Function to display class result on console
+void displayClassResult(const vector<Student> &students, double quizWeight, double assignmentWeight, 
+                       double midtermWeight, double finaltermWeight, double projectWeight) {
+    cout << "\nClass Result:\n";
+    cout << "--------------------------------------------------------------------------------------------------------\n";
+    cout << left << setw(25) << "Student Names" << setw(15) << "Roll Numbers" 
+         << setw(10) << "Quiz(" << quizWeight << ")" 
+         << setw(12) << "Assign(" << assignmentWeight << ")" 
+         << setw(8) << "Mid(" << midtermWeight << ")" 
+         << setw(10) << "Final(" << finaltermWeight << ")" 
+         << setw(10) << "Proj(" << projectWeight << ")" 
+         << setw(10) << "Total" << "Grade\n";
+    cout << "--------------------------------------------------------------------------------------------------------\n";
+
+    for (const auto &student : students) {
+        // Calculate components for display
+        double quizTotal = accumulate(student.quizzes.begin(), student.quizzes.end(), 0.0);
+        double quizMax = student.quizzes.size() * 10.0;
+        double quizDisplay = (quizTotal / quizMax) * quizWeight;
+
+        double assignmentTotal = accumulate(student.assignments.begin(), student.assignments.end(), 0.0);
+        double assignmentMax = student.assignments.size() * 10.0;
+        double assignmentDisplay = (assignmentTotal / assignmentMax) * assignmentWeight;
+
+        double midtermDisplay = (student.midterm / 100.0) * midtermWeight;
+        double finaltermDisplay = (student.finalterm / 100.0) * finaltermWeight;
+        double projectDisplay = (student.project / 40.0) * projectWeight;
+
+        cout << left << setw(25) << student.name.substr(0, 24) 
+             << setw(15) << student.rollNumber 
+             << fixed << setprecision(2) 
+             << setw(10) << quizDisplay 
+             << setw(12) << assignmentDisplay 
+             << setw(8) << midtermDisplay 
+             << setw(10) << finaltermDisplay 
+             << setw(10) << projectDisplay 
+             << setw(10) << student.total 
+             << student.grade << endl;
+    }
+}
+
+// Function to generate class result in a CSV file
+void generateCSVResult(const vector<Student> &students, const string &filename, 
+                      double quizWeight, double assignmentWeight, 
+                      double midtermWeight, double finaltermWeight, double projectWeight) {
+    ofstream outFile(filename);
+    if (!outFile.is_open()) {
+        cerr << "Error creating output file: " << filename << endl;
+        return;
+    }
+
+    // Write headers
+    outFile << "Student Names,Roll Numbers,Quiz,Assignment,Mid,Final,Project,Total,Grades\n";
+    outFile << "Weightage (out of)," << quizWeight << "," << assignmentWeight << "," 
+            << midtermWeight << "," << finaltermWeight << "," << projectWeight << ",100,\n";
+
+    // Write student data
+    for (const auto &student : students) {
+        // Calculate components for display
+        double quizTotal = accumulate(student.quizzes.begin(), student.quizzes.end(), 0.0);
+        double quizMax = student.quizzes.size() * 10.0;
+        double quizDisplay = (quizTotal / quizMax) * quizWeight;
+
+        double assignmentTotal = accumulate(student.assignments.begin(), student.assignments.end(), 0.0);
+        double assignmentMax = student.assignments.size() * 10.0;
+        double assignmentDisplay = (assignmentTotal / assignmentMax) * assignmentWeight;
+
+        double midtermDisplay = (student.midterm / 100.0) * midtermWeight;
+        double finaltermDisplay = (student.finalterm / 100.0) * finaltermWeight;
+        double projectDisplay = (student.project / 40.0) * projectWeight;
+
+        outFile << "\"" << student.name << "\"," 
+                << student.rollNumber << "," 
+                << fixed << setprecision(2) 
+                << quizDisplay << "," 
+                << assignmentDisplay << "," 
+                << midtermDisplay << "," 
+                << finaltermDisplay << "," 
+                << projectDisplay << "," 
+                << student.total << "," 
+                << student.grade << "\n";
+    }
+
+    outFile.close();
+    cout << "Results successfully saved to " << filename << endl;
+}
+
+// Function to search student by roll number
+void searchStudent(const vector<Student> &students) {
+    string rollNumber;
+    cout << "Enter student roll number to search: ";
+    cin >> rollNumber;
+
+    bool found = false;
+    for (const auto &student : students) {
+        if (student.rollNumber == rollNumber) {
+            found = true;
+            cout << "\nStudent Found:\n";
+            cout << "Name: " << student.name << endl;
+            cout << "Roll Number: " << student.rollNumber << endl;
+            cout << "Quizzes: ";
+            for (double q : student.quizzes) {
+                cout << q << " ";
+            }
+            cout << "\nAssignments: ";
+            for (double a : student.assignments) {
+                cout << a << " ";
+            }
+            cout << "\nMidterm: " << student.midterm << endl;
+            cout << "Finalterm: " << student.finalterm << endl;
+            cout << "Project: " << student.project << endl;
+            cout << "Total Marks: " << fixed << setprecision(2) << student.total << endl;
+            cout << "Grade: " << student.grade << endl;
+            break;
+        }
+    }
+
+    if (!found) {
+        cout << "Student with roll number " << rollNumber << " not found.\n";
+    }
+}
+
+int main() {
+    cout << "Teacher Portal - Student Grade Calculator\n";
+    cout << "=========================================\n";
+
+    // Get input filename from user
+    string filename;
+    cout << "Enter the name of the input CSV file : ";
+    cin >> filename;
+
+    // Read student data
+    vector<Student> students = readStudentData(filename);
+    if (students.empty()) {
+        cerr << "No student data found or error reading file. Exiting.\n";
+        return 1;
+    }
+
+    // Get weightages from user
+    double quizWeight, assignmentWeight, midtermWeight, finaltermWeight, projectWeight;
+    double totalWeight = 0.0;
+
+    do {
+        cout << "\nEnter weightages (must sum to 100):\n";
+        cout << "Quizzes: ";
+        cin >> quizWeight;
+        cout << "Assignments: ";
+        cin >> assignmentWeight;
+        cout << "Midterm Exam: ";
+        cin >> midtermWeight;
+        cout << "Final Exam: ";
+        cin >> finaltermWeight;
+        cout << "Project: ";
+        cin >> projectWeight;
+
+        totalWeight = quizWeight + assignmentWeight + midtermWeight + finaltermWeight + projectWeight;
+
+        if (abs(totalWeight - 100.0) > 0.001) {
+            cout << "Error: Weightages must sum to 100 (current sum: " << totalWeight << "). Please try again.\n";
+        }
+    } while (abs(totalWeight - 100.0) > 0.001);
+    // Calculate totals and grades
+    calculateTotals(students, quizWeight, assignmentWeight, midtermWeight, finaltermWeight, projectWeight);
+    assignGrades(students);
+    // Main menu
+    int choice;
+    do {
+        cout << "\nMain Menu:\n";
+        cout << "1. Display Class Result on console\n";
+        cout << "2. Generate Class Result in a new CSV file\n";
+        cout << "3. Search Result of an individual student by roll number\n";
+        cout << "4. Exit\n";
+        cout << "Enter your choice (1-4): ";
+        cin >> choice;
+
+        switch (choice) {
+            case 1:
+                displayClassResult(students, quizWeight, assignmentWeight, 
+                                  midtermWeight, finaltermWeight, projectWeight);
+                break;
+            case 2: {
+                string outputFilename = filename.substr(0, filename.find_last_of('.')) + "_result.csv";
+                generateCSVResult(students, outputFilename, quizWeight, assignmentWeight, 
+                                 midtermWeight, finaltermWeight, projectWeight);
+                break;
+            }
+            case 3:
+                searchStudent(students);
+                break;
+            case 4:
+                cout << "Exiting program.\n";
+                break;
+            default:
+                cout << "Invalid choice. Please enter a number between 1 and 4.\n";
+        }
+    } while (choice != 4);
+
+    return 0;
+}
